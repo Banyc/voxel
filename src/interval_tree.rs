@@ -54,6 +54,9 @@ impl<T> ContiguousIntervalTree<T> {
     pub fn get(&self, index: usize) -> &T {
         &self.nodes[self.arr_index(index)].value
     }
+    pub fn cell_wise_iter(&self) -> CellWiseIter<'_, T> {
+        CellWiseIter::new(self)
+    }
 }
 impl<T> ContiguousIntervalTree<T>
 where
@@ -141,6 +144,40 @@ pub struct IntervalNode<T> {
     pub value: T,
 }
 
+#[derive(Debug, Clone)]
+pub struct CellWiseIter<'a, T> {
+    tree: &'a ContiguousIntervalTree<T>,
+    arr_index: usize,
+    interval_i: usize,
+}
+impl<'a, T> CellWiseIter<'a, T> {
+    pub fn new(tree: &'a ContiguousIntervalTree<T>) -> Self {
+        Self {
+            tree,
+            arr_index: 0,
+            interval_i: 0,
+        }
+    }
+}
+impl<'a, T> Iterator for CellWiseIter<'a, T> {
+    type Item = &'a T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.arr_index == self.tree.nodes.len() {
+            return None;
+        }
+        let interval = &self.tree.nodes[self.arr_index];
+        self.interval_i += 1;
+        let interval_end = self.tree.interval_end(self.arr_index);
+        let interval_len = interval_end - interval.index_start;
+        if self.interval_i == interval_len {
+            self.arr_index += 1;
+            self.interval_i = 0;
+        }
+        Some(&interval.value)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -171,6 +208,9 @@ mod tests {
         assert_eq!(*it.get(4), 2);
         assert_eq!(*it.get(5), 2);
         assert_eq!(*it.get(15), 2);
+
+        let cells = it.cell_wise_iter().copied().collect::<Vec<usize>>();
+        assert_eq!(cells, [0, 0, 0, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]);
     }
 
     #[test]
