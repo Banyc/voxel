@@ -132,7 +132,7 @@ where
                 }
 
                 // Append to the current node
-                self.nodes.splice(arr_index + 1..arr_index + 1, [new_node]);
+                self.nodes.insert(arr_index + 1, new_node);
             }
         }
     }
