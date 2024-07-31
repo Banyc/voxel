@@ -1,44 +1,47 @@
 #[derive(Debug, Clone)]
 pub struct ContiguousIntervalTree<T> {
-    nodes: Vec<IntervalNode<T>>,
+    intervals: Vec<IntervalNode<T>>,
     capacity: usize,
 }
 impl<T> ContiguousIntervalTree<T> {
     fn check_rep(&self) {
-        assert_eq!(self.nodes.first().unwrap().index_start, 0);
+        assert_eq!(self.intervals.first().unwrap().cell_i_start, 0);
         let mut prev_index = None;
-        for node in &self.nodes {
+        for node in &self.intervals {
             if let Some(prev_index) = prev_index {
-                assert!(prev_index < node.index_start);
+                assert!(prev_index < node.cell_i_start);
             }
-            prev_index = Some(node.index_start);
+            prev_index = Some(node.cell_i_start);
         }
         assert!(prev_index.unwrap() < self.capacity);
     }
 
     pub fn new(nodes: Vec<IntervalNode<T>>, capacity: usize) -> Self {
-        let this = Self { nodes, capacity };
+        let this = Self {
+            intervals: nodes,
+            capacity,
+        };
         this.check_rep();
         this
     }
 
-    fn interval_end(&self, arr_index: usize) -> usize {
-        self.nodes
-            .get(arr_index + 1)
-            .map(|x| x.index_start)
+    fn interval_cell_i_end(&self, interval_i: usize) -> usize {
+        self.intervals
+            .get(interval_i + 1)
+            .map(|x| x.cell_i_start)
             .unwrap_or(self.capacity)
     }
-    fn arr_index(&self, index: usize) -> usize {
+    fn interval_i(&self, cell_i: usize) -> usize {
         let mut start = 0;
-        let mut end = self.nodes.len();
+        let mut end = self.intervals.len();
         loop {
             assert!(start < end);
             let mid = (start + end) / 2;
-            let interval = &self.nodes[mid];
-            let interval_end = self.interval_end(mid);
-            match interval.index_start.cmp(&index) {
+            let interval = &self.intervals[mid];
+            let interval_cell_i_end = self.interval_cell_i_end(mid);
+            match interval.cell_i_start.cmp(&cell_i) {
                 std::cmp::Ordering::Equal | std::cmp::Ordering::Less => {
-                    if (interval.index_start..interval_end).contains(&index) {
+                    if (interval.cell_i_start..interval_cell_i_end).contains(&cell_i) {
                         return mid;
                     }
                     start = mid + 1;
@@ -52,7 +55,7 @@ impl<T> ContiguousIntervalTree<T> {
 
     /// Time complexity: $O(\log N)$
     pub fn get(&self, index: usize) -> &T {
-        &self.nodes[self.arr_index(index)].value
+        &self.intervals[self.interval_i(index)].value
     }
     pub fn cell_wise_iter(&self) -> CellWiseIter<'_, T> {
         CellWiseIter::new(self)
@@ -64,75 +67,78 @@ where
 {
     /// Time complexity: $O(N)$
     pub fn set(&mut self, index: usize, value: T) {
-        let new_node = IntervalNode {
-            index_start: index,
+        let new = IntervalNode {
+            cell_i_start: index,
             value,
         };
-        let arr_index = self.arr_index(index);
-        let interval = &self.nodes[arr_index];
-        let interval_end = self.interval_end(arr_index);
-        if interval.value == new_node.value {
+        let interval_i = self.interval_i(index);
+        let interval = &self.intervals[interval_i];
+        let interval_cell_i_end = self.interval_cell_i_end(interval_i);
+        if interval.value == new.value {
             return;
         }
-        if interval.index_start == index {
+        if interval.cell_i_start == index {
             let mut should_merge_with_prev_node = false;
-            if let Some(prev) = arr_index.checked_sub(1).and_then(|i| self.nodes.get(i)) {
-                if prev.value == new_node.value {
+            if let Some(prev) = interval_i
+                .checked_sub(1)
+                .and_then(|i| self.intervals.get(i))
+            {
+                if prev.value == new.value {
                     should_merge_with_prev_node = true;
                 }
             }
 
-            let is_only_one = interval_end - interval.index_start == 1;
+            let is_only_one = interval_cell_i_end - interval.cell_i_start == 1;
             if !is_only_one {
                 // Shrink the current node to the right
-                self.nodes[arr_index].index_start += 1;
+                self.intervals[interval_i].cell_i_start += 1;
             }
 
             if should_merge_with_prev_node {
                 if is_only_one {
                     // Remove the current node
-                    self.nodes.remove(arr_index);
+                    self.intervals.remove(interval_i);
                 }
                 return;
             }
 
             let range_end = if is_only_one {
                 // Remove the current node
-                arr_index + 1
+                interval_i + 1
             } else {
                 // Prepend to the current node
-                arr_index
+                interval_i
             };
-            self.nodes.splice(arr_index..range_end, [new_node]);
+            self.intervals.splice(interval_i..range_end, [new]);
             return;
         }
-        let is_at_last = index == interval_end - 1;
+        let is_at_last = index == interval_cell_i_end - 1;
         match is_at_last {
             false => {
                 // Split the current node
                 let orig_value = interval.value.clone();
-                self.nodes.splice(
-                    arr_index + 1..arr_index + 1,
+                self.intervals.splice(
+                    interval_i + 1..interval_i + 1,
                     [
-                        new_node,
+                        new,
                         IntervalNode {
-                            index_start: index + 1,
+                            cell_i_start: index + 1,
                             value: orig_value,
                         },
                     ],
                 );
             }
             true => {
-                if let Some(next) = self.nodes.get_mut(arr_index + 1) {
-                    if next.value == new_node.value {
+                if let Some(next) = self.intervals.get_mut(interval_i + 1) {
+                    if next.value == new.value {
                         // Merge with the next node
-                        next.index_start += 1;
+                        next.cell_i_start += 1;
                         return;
                     }
                 }
 
                 // Append to the current node
-                self.nodes.insert(arr_index + 1, new_node);
+                self.intervals.insert(interval_i + 1, new);
             }
         }
     }
@@ -140,22 +146,22 @@ where
 
 #[derive(Debug, Clone)]
 pub struct IntervalNode<T> {
-    pub index_start: usize,
+    pub cell_i_start: usize,
     pub value: T,
 }
 
 #[derive(Debug, Clone)]
 pub struct CellWiseIter<'a, T> {
     tree: &'a ContiguousIntervalTree<T>,
-    arr_index: usize,
     interval_i: usize,
+    cell_i: usize,
 }
 impl<'a, T> CellWiseIter<'a, T> {
     pub fn new(tree: &'a ContiguousIntervalTree<T>) -> Self {
         Self {
             tree,
-            arr_index: 0,
             interval_i: 0,
+            cell_i: 0,
         }
     }
 }
@@ -163,16 +169,16 @@ impl<'a, T> Iterator for CellWiseIter<'a, T> {
     type Item = &'a T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.arr_index == self.tree.nodes.len() {
+        if self.interval_i == self.tree.intervals.len() {
             return None;
         }
-        let interval = &self.tree.nodes[self.arr_index];
-        self.interval_i += 1;
-        let interval_end = self.tree.interval_end(self.arr_index);
-        let interval_len = interval_end - interval.index_start;
-        if self.interval_i == interval_len {
-            self.arr_index += 1;
-            self.interval_i = 0;
+        let interval = &self.tree.intervals[self.interval_i];
+        self.cell_i += 1;
+        let interval_end = self.tree.interval_cell_i_end(self.interval_i);
+        let interval_len = interval_end - interval.cell_i_start;
+        if self.cell_i == interval_len {
+            self.interval_i += 1;
+            self.cell_i = 0;
         }
         Some(&interval.value)
     }
@@ -187,15 +193,15 @@ mod tests {
         let it = ContiguousIntervalTree::new(
             Vec::from_iter([
                 IntervalNode {
-                    index_start: 0,
+                    cell_i_start: 0,
                     value: 0,
                 },
                 IntervalNode {
-                    index_start: 3,
+                    cell_i_start: 3,
                     value: 1,
                 },
                 IntervalNode {
-                    index_start: 4,
+                    cell_i_start: 4,
                     value: 2,
                 },
             ]),
@@ -218,15 +224,15 @@ mod tests {
         let mut it = ContiguousIntervalTree::new(
             Vec::from_iter([
                 IntervalNode {
-                    index_start: 0,
+                    cell_i_start: 0,
                     value: 0,
                 },
                 IntervalNode {
-                    index_start: 3,
+                    cell_i_start: 3,
                     value: 1,
                 },
                 IntervalNode {
-                    index_start: 4,
+                    cell_i_start: 4,
                     value: 2,
                 },
             ]),
