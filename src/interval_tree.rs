@@ -24,6 +24,9 @@ impl<T> ContiguousIntervalTree<T> {
         this.check_rep();
         this
     }
+    pub fn capacity(&self) -> usize {
+        self.capacity
+    }
 
     fn interval_cell_i_end(&self, interval_i: usize) -> usize {
         self.intervals
@@ -31,7 +34,7 @@ impl<T> ContiguousIntervalTree<T> {
             .map(|x| x.cell_i_start)
             .unwrap_or(self.capacity)
     }
-    fn interval_i(&self, cell_i: usize) -> usize {
+    fn cell_pos(&self, cell_i: usize) -> CellPos {
         let mut start = 0;
         let mut end = self.intervals.len();
         loop {
@@ -42,7 +45,10 @@ impl<T> ContiguousIntervalTree<T> {
             match interval.cell_i_start.cmp(&cell_i) {
                 std::cmp::Ordering::Equal | std::cmp::Ordering::Less => {
                     if (interval.cell_i_start..interval_cell_i_end).contains(&cell_i) {
-                        return mid;
+                        return CellPos {
+                            interval_index: mid,
+                            cell_offset: cell_i - interval.cell_i_start,
+                        };
                     }
                     start = mid + 1;
                 }
@@ -55,10 +61,10 @@ impl<T> ContiguousIntervalTree<T> {
 
     /// Time complexity: $O(\log N)$
     pub fn get(&self, index: usize) -> &T {
-        &self.intervals[self.interval_i(index)].value
+        &self.intervals[self.cell_pos(index).interval_index].value
     }
-    pub fn cell_wise_iter(&self) -> CellWiseIter<'_, T> {
-        CellWiseIter::new(self)
+    pub fn cell_wise_iter(&self, start_cell_i: usize) -> CellWiseIter<'_, T> {
+        CellWiseIter::new(self, start_cell_i)
     }
 }
 impl<T> ContiguousIntervalTree<T>
@@ -71,7 +77,7 @@ where
             cell_i_start: index,
             value,
         };
-        let interval_i = self.interval_i(index);
+        let interval_i = self.cell_pos(index).interval_index;
         let interval = &self.intervals[interval_i];
         let interval_cell_i_end = self.interval_cell_i_end(interval_i);
         if interval.value == new.value {
@@ -145,6 +151,12 @@ where
 }
 
 #[derive(Debug, Clone)]
+pub struct CellPos {
+    pub interval_index: usize,
+    pub cell_offset: usize,
+}
+
+#[derive(Debug, Clone)]
 pub struct IntervalNode<T> {
     pub cell_i_start: usize,
     pub value: T,
@@ -157,11 +169,16 @@ pub struct CellWiseIter<'a, T> {
     cell_i: usize,
 }
 impl<'a, T> CellWiseIter<'a, T> {
-    pub fn new(tree: &'a ContiguousIntervalTree<T>) -> Self {
+    pub fn new(tree: &'a ContiguousIntervalTree<T>, start_cell_i: usize) -> Self {
+        let interval_i = if start_cell_i == 0 {
+            0
+        } else {
+            tree.cell_pos(start_cell_i).interval_index
+        };
         Self {
             tree,
-            interval_i: 0,
-            cell_i: 0,
+            interval_i,
+            cell_i: start_cell_i,
         }
     }
 }
@@ -215,7 +232,7 @@ mod tests {
         assert_eq!(*it.get(5), 2);
         assert_eq!(*it.get(15), 2);
 
-        let cells = it.cell_wise_iter().copied().collect::<Vec<usize>>();
+        let cells = it.cell_wise_iter(0).copied().collect::<Vec<usize>>();
         assert_eq!(cells, [0, 0, 0, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]);
     }
 
