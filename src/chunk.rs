@@ -115,13 +115,15 @@ impl Iterator for IndexIter {
 #[test]
 fn test_index_iter() {
     let start = [0, 1, 2];
-    let inclusive_end = [1, 3, 5];
+    let inclusive_end = [1, 3, 2];
     let mut iter = IndexIter::new(start, inclusive_end);
     assert_eq!(iter.next(), Some([0, 1, 2]));
     assert_eq!(iter.next(), Some([1, 1, 2]));
     assert_eq!(iter.next(), Some([0, 2, 2]));
     assert_eq!(iter.next(), Some([1, 2, 2]));
     assert_eq!(iter.next(), Some([0, 3, 2]));
+    assert_eq!(iter.next(), Some([1, 3, 2]));
+    assert_eq!(iter.next(), None);
 }
 
 #[derive(Debug, Clone)]
