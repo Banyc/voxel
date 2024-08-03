@@ -2,9 +2,10 @@ use std::collections::HashMap;
 
 use crate::interval_tree::{CellWiseIter, ContiguousIntervalTree};
 
-pub type Index = [usize; 3];
+pub type IndexPart = u64;
+pub type Index = [IndexPart; 3];
 
-const CHUNK_SIZE: [usize; 3] = [32, 32, 32];
+const CHUNK_SIZE: [usize; 3] = [2 << 4, 2 << 4, 2 << 4];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ChunkIndex {
@@ -34,8 +35,8 @@ impl VoxelIndex {
             .iter()
             .copied()
             .zip(CHUNK_SIZE)
-            .map(|(x, n)| x / n)
-            .collect::<Vec<usize>>()
+            .map(|(x, n)| x / IndexPart::try_from(n).unwrap())
+            .collect::<Vec<IndexPart>>()
             .try_into()
             .unwrap();
         ChunkIndex::new(index)
@@ -44,8 +45,8 @@ impl VoxelIndex {
         let mut index = 0;
         let mut mag = 1;
         for (x, n) in self.value.iter().copied().zip(CHUNK_SIZE) {
-            let i = x % n;
-            index += i * mag;
+            let i = x % IndexPart::try_from(n).unwrap();
+            index += usize::try_from(i).unwrap() * mag;
             mag *= n;
         }
         index
@@ -140,6 +141,20 @@ fn test_value_iter() {
     }
     let start = [CHUNK_SIZE[0] - 1, CHUNK_SIZE[1] - 1, 0];
     let end = [CHUNK_SIZE[0], CHUNK_SIZE[1], 0];
+    let start = start
+        .iter()
+        .copied()
+        .map(|x| IndexPart::try_from(x).unwrap())
+        .collect::<Vec<IndexPart>>()
+        .try_into()
+        .unwrap();
+    let end = end
+        .iter()
+        .copied()
+        .map(|x| IndexPart::try_from(x).unwrap())
+        .collect::<Vec<IndexPart>>()
+        .try_into()
+        .unwrap();
     let start = VoxelIndex::new(start);
     let end = VoxelIndex::new(end);
     let mut iter = ValueIter::new(&chunk_set, start..=end);
